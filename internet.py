@@ -5,7 +5,7 @@ import numpy as np
 from random import randint
 import matplotlib.pyplot as plt    
 MAX_FEATURES = 500
-GOOD_MATCH_PERCENT = 0.05
+GOOD_MATCH_PERCENT = 0.5
 def random_color():
     return (randint(0,255),randint(0,255),randint(0,255))
 # -----------------------------------------------------------------------------------------------
@@ -76,6 +76,7 @@ def alignImages(im1, im2,band=None):
     hist=np.histogram(displacements[:,0])
     x_displacement=hist[1][np.argmax(hist[0])]
     plt.clf() 
+    plt.xlim(-600,600) #! cheat
     plt.hist(displacements[:,0],bins=100)
     plt.savefig('original hist.png')
     print('[+] x displacement is {:.2f}'.format(x_displacement))
@@ -92,6 +93,7 @@ def alignImages(im1, im2,band=None):
         hist=np.histogram(displacements[:,0])
         x_displacement=hist[1][np.argmax(hist[0])]
         plt.clf() 
+        plt.xlim(-600,600) #! cheat
         plt.hist(displacements[:,0],bins=100)
         plt.savefig('filtered hist.png')
     print('[+] filtered x displacement within bands of {} is {:.2f}'.format(band,x_displacement))
@@ -113,7 +115,22 @@ def alignImages(im1, im2,band=None):
     height, width, channels = im2.shape
     im1Reg = cv.warpPerspective(im1, h, (width, height))
     
-    return im1Reg, h
+    # Extract location of good matches --------------------------------------
+    points1 = np.zeros((len(filtered_matches), 2), dtype=np.float32)
+    points2 = np.zeros((len(filtered_matches), 2), dtype=np.float32)
+    
+    for i, match in enumerate(filtered_matches):
+        points1[i, :] = keypoints1[match.queryIdx].pt
+        points2[i, :] = keypoints2[match.trainIdx].pt
+    
+    # Find homography
+    h_filtered, mask = cv.findHomography(points1, points2, cv.RANSAC)
+    
+    # Use homography
+    height, width, channels = im2.shape
+    im1Reg_filtered = cv.warpPerspective(im1, h_filtered, (width, height))
+
+    return im1Reg,im1Reg_filtered, h,h_filtered
 # -----------------------------------------------------------------------------------------------
 if __name__ == '__main__':
     
@@ -139,10 +156,10 @@ if __name__ == '__main__':
     
     # Registered image will be resotred in imReg.
     # The estimated homography will be stored in h.
-    imReg, h = alignImages(im, imReference,[0,100])
+    imReg,imReg_filtered, h, h_filtered = alignImages(im, imReference,[0,20])
 
     # Write aligned image to disk.
-    outFilename = "aligned.jpg"
-    cv.imwrite(outFilename, imReg)
+    cv.imwrite("aligned.jpg", imReg)
+    cv.imwrite("aligned_filtered.jpg", imReg_filtered)
     
     # Print estimated homography
